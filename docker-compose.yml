@@ -1,0 +1,87 @@
+x-common: &common
+    restart: unless-stopped
+    networks:
+        - spatie-api
+
+services:
+    # Aplicação Laravel (PHP-FPM + Node para Vite)
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        <<: *common
+        working_dir: /var/www
+        volumes:
+            - ./:/var/www
+        depends_on:
+            - db
+            - redis
+        labels:
+            - "service=app"
+        ports:
+            - "${VITE_PORT}:5173" # Porta do Vite exposta para hot reload
+        environment:
+            APP_ENV: ${APP_ENV:-local} # default local (dev)
+        command: ["./docker/start.sh"]
+
+    # Servidor Nginx
+    nginx:
+        image: nginx:alpine
+        <<: *common
+        ports:
+            - "${NGINX_PORT}:80" # Porta configurável no .env (ex: 8697)
+        volumes:
+            - ./:/var/www
+            - ./docker/nginx/:/etc/nginx/conf.d/
+        depends_on:
+            - app
+        labels:
+            - "service=nginx"
+
+    # Banco de Dados MySQL
+    db:
+        image: mysql:8.0
+        platform: linux/x86_64
+        <<: *common
+        environment:
+            MYSQL_DATABASE: ${DB_DATABASE}
+            MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+            MYSQL_USER: ${DB_USERNAME}
+            MYSQL_PASSWORD: ${DB_PASSWORD}
+        volumes:
+            - ./.docker/mysql/dbdata:/var/lib/mysql
+        ports:
+            - "${MYSQL_PORT}:3306"
+        healthcheck:
+            test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+            retries: 3
+            timeout: 5s
+        labels:
+            - "service=db"
+
+    # Interface PHPMyAdmin
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin
+        platform: linux/x86_64
+        <<: *common
+        ports:
+            - "${PHPMYADMIN_PORT:-8080}:80"
+        environment:
+            PMA_HOST: db
+            PMA_PORT: 3306
+            MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+        depends_on:
+            - db
+        labels:
+            - "service=phpmyadmin"
+
+    # Servidor Redis
+    redis:
+        image: redis:latest
+        <<: *common
+        labels:
+            - "service=redis"
+
+networks:
+    spatie-api:
+        driver: bridge
