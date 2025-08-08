@@ -4,8 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Spatie\Permission\Models\Permission;
-
+use App\Models\Permission;
+use Illuminate\Validation\Rule;
+use App\Models\Tenant;
 class PermissionController extends Controller
 {
     public function index()
@@ -16,11 +17,17 @@ class PermissionController extends Controller
    public function store(Request $request)
     {
         // Validação básica dos campos
-        $request->validate([
-            'name' => 'required|string|unique:permissions,name',
-            'guard_name' => 'required|string',
-            'tenant_id' => 'required|uuid|exists:tenants,id',
-        ]);
+       $request->validate([
+    'name' => [
+        'required',
+        'string',
+        Rule::unique('permissions')->where(function ($query) use ($request) {
+            return $query->where('tenant_id', $request->tenant_id);
+        }),
+    ],
+    'guard_name' => 'required|string',
+    'tenant_id' => 'required|uuid|exists:tenants,id',
+]);
 
         // Cria a permissão
         $permission = Permission::create([
